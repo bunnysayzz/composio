@@ -32,6 +32,12 @@
   learns since in `known-toolkit-slugs.json`, so `composio tools execute` only
   reaches for the catalog when a slug matches nothing it knows — a toolkit
   released after your CLI version. `FORCE_USE_CACHE` is unaffected.
+- Resolving a tool's toolkit now reads what the CLI knows locally once per run
+  rather than once per lookup. A single `composio tools execute` resolves the
+  same toolkit up to four times — and once per tool with `--parallel` — and
+  each of those re-read `known-toolkit-slugs.json`, re-parsed it, and rebuilt
+  the lookup table over it. The weekly background refresh now also runs once per
+  run instead of rewriting the file after every lookup.
 - Cache files are now written atomically, so an interrupted run can no longer
   leave a truncated `toolkits.json` or `tools.json` behind.
 

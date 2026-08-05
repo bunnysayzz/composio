@@ -7,6 +7,7 @@ import { toolkitFromToolSlug } from 'src/effects/toolkit-from-tool-slug';
 import type { Toolkit, Toolkits } from 'src/models/toolkits';
 import { ComposioToolkitsRepository, HttpServerError } from 'src/services/composio-clients';
 import { KNOWN_TOOLKIT_SLUGS_FILE } from 'src/services/known-toolkit-slugs';
+import { ToolkitSlugCatalog } from 'src/services/toolkit-slug-catalog';
 import {
   countingToolkitsRepository,
   type GetToolkitsError,
@@ -70,7 +71,11 @@ const withResolver = <A>(
   },
   program: (
     context: ResolverContext
-  ) => Effect.Effect<A, unknown, FileSystem.FileSystem | ComposioToolkitsRepository>
+  ) => Effect.Effect<
+    A,
+    unknown,
+    FileSystem.FileSystem | ComposioToolkitsRepository | ToolkitSlugCatalog
+  >
 ) =>
   Effect.suspend(() => {
     const cacheDir = tempy.temporaryDirectory();
@@ -85,7 +90,11 @@ const runInCacheDir = <A>(
   },
   program: (
     context: ResolverContext
-  ) => Effect.Effect<A, unknown, FileSystem.FileSystem | ComposioToolkitsRepository>
+  ) => Effect.Effect<
+    A,
+    unknown,
+    FileSystem.FileSystem | ComposioToolkitsRepository | ToolkitSlugCatalog
+  >
 ) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -110,7 +119,17 @@ const runInCacheDir = <A>(
           Effect.filterOrFail(predicate, () => 'learned file has not caught up yet' as const),
           Effect.retry(Schedule.spaced('10 millis').pipe(Schedule.intersect(Schedule.recurs(200))))
         ),
-    }).pipe(Effect.provide(repository.layer));
+    }).pipe(
+      // Built inside this test's cache directory, and fresh per test: the
+      // catalog memoizes what it reads, so a shared one would leak the first
+      // test's learned slugs into every later one.
+      Effect.provide(
+        Layer.mergeAll(
+          repository.layer,
+          Layer.provide(ToolkitSlugCatalog.Default, repository.layer)
+        )
+      )
+    );
   }).pipe(
     Effect.provide(BunFileSystem.layer),
     Effect.withConfigProvider(ConfigProvider.fromMap(new Map([['CACHE_DIR', cacheDir]])))
@@ -240,6 +259,28 @@ describe('toolkitFromToolSlug', () => {
             content.includes(UNRELEASED_TOOLKIT)
           );
           expect(learned).not.toContain('stale_toolkit');
+        })
+    )
+  );
+
+  it.live('reads local knowledge once, however many slugs a run resolves', () =>
+    withResolver(
+      {
+        getToolkits: () => Effect.succeed([makeToolkit(UNRELEASED_TOOLKIT)]),
+        seedLearnedFile: learnedFileContent(['stale_toolkit'], 8),
+      },
+      ({ calls, waitForLearnedFile }) =>
+        Effect.gen(function* () {
+          expect(yield* toolkitFromToolSlug('GOOGLE_ANALYTICS_RUN_REPORT')).toBe(
+            'google_analytics'
+          );
+          expect(yield* toolkitFromToolSlug('GMAIL_SEND_EMAIL')).toBe('gmail');
+          expect(yield* toolkitFromToolSlug('GITHUB_CREATE_AN_ISSUE')).toBe('github');
+
+          yield* waitForLearnedFile(content => content.includes(UNRELEASED_TOOLKIT));
+          // The staleness verdict cannot change under a running process, so the
+          // refresh it triggers belongs to the run, not to each resolution.
+          expect(calls()).toBe(1);
         })
     )
   );
