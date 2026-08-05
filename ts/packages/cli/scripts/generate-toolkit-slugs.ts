@@ -15,6 +15,7 @@ import {
 } from 'effect';
 import { FileSystem } from '@effect/platform';
 import { BunContext, BunFileSystem, BunRuntime } from '@effect/platform-bun';
+import { TOOLKIT_SLUG_PATTERN } from 'src/models/toolkits';
 import { teardown } from './_teardown';
 
 /**
@@ -48,8 +49,6 @@ const SENTINEL_SLUGS = ['github', 'gmail', 'google_analytics'] as const;
  * removes one, so anything below this is a bad fetch, not a shrunken catalog.
  */
 const MIN_EXPECTED_SLUGS = 1000;
-
-const SLUG_PATTERN = /^[a-z0-9_][a-z0-9_-]*$/;
 
 const ToolkitsPage = Schema.Struct({
   items: Schema.Array(
@@ -156,7 +155,7 @@ const checkSanity = (slugs: ReadonlyArray<string>) =>
       });
     }
 
-    const malformed = slugs.filter(slug => !SLUG_PATTERN.test(slug));
+    const malformed = slugs.filter(slug => !TOOLKIT_SLUG_PATTERN.test(slug));
     if (malformed.length > 0) {
       return yield* new ToolkitFetchError({
         message: `Refusing to write malformed slugs: ${malformed.slice(0, 10).join(', ')}`,

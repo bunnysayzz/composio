@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BAKED_TOOLKIT_SLUGS, BAKED_TOOLKIT_SLUGS_REFRESHED_AT } from 'src/generated/toolkit-slugs';
+import { TOOLKIT_SLUG_PATTERN } from 'src/models/toolkits';
 
 /**
  * Guards the checked-in output of `scripts/generate-toolkit-slugs.ts`. The
@@ -17,7 +18,7 @@ describe('BAKED_TOOLKIT_SLUGS', () => {
   });
 
   it('holds only lowercase slugs', () => {
-    const malformed = BAKED_TOOLKIT_SLUGS.filter(slug => !/^[a-z0-9_][a-z0-9_-]*$/.test(slug));
+    const malformed = BAKED_TOOLKIT_SLUGS.filter(slug => !TOOLKIT_SLUG_PATTERN.test(slug));
     expect(malformed).toEqual([]);
   });
 
